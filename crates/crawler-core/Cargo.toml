@@ -4,5 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-url.workspace = true
+# serde is serialize/deserialize, library to convert structs to/from stuff like JSON, TOML or YAML
+serde.workspace = true
+# makes it so that Url can be supported by serde
+url = { workspace = true, features = ["serde"] }
 thiserror.workspace = true

@@ -425,6 +425,7 @@ dependencies = [
 name = "crawler-core"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "thiserror",
  "url",
 ]
@@ -2894,6 +2895,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]

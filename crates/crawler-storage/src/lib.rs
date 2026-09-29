@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use crawler_core::{CrawlJobId, OriginId, UrlId};
+use crawler_core::{CrawlConfig, CrawlJobId, OriginId, UrlId};
 use serde_json::Value;
 
 use sqlx::{
@@ -147,6 +147,13 @@ pub struct LinkInput {
 #[async_trait]
 pub trait JobRepository {
     async fn create_job(&self, name: &str, config: &Value) -> Result<CrawlJobId, StorageError>;
+
+    // new instead of replace bc it will use the old one (create_job will be called within, I think.)
+    async fn create_job_from_config(
+        &self,
+        name: &str,
+        config: &CrawlConfig,
+    ) -> Result<CrawlJobId, StorageError>;
 }
 
 #[async_trait]
@@ -178,6 +185,15 @@ impl JobRepository for PgRepository {
         .await?;
 
         crawl_job_id(row.try_get("id")?)
+    }
+
+    async fn create_job_from_config(
+        &self,
+        name: &str,
+        config: &CrawlConfig,
+    ) -> Result<CrawlJobId, StorageError> {
+        let json = serde_json::to_value(config)?;
+        self.create_job(name, &json).await
     }
 }
 
