@@ -44,6 +44,23 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: crawler
+          POSTGRES_PASSWORD: crawler_dev_password
+          POSTGRES_DB: crawler
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crawler -d crawler"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 5s
+    env:
+      DATABASE_URL: postgres://crawler:crawler_dev_password@localhost:5432/crawler
     steps:
       - uses: actions/checkout@v4
         with:

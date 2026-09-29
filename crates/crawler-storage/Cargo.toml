@@ -1,0 +1,13 @@
+[package]
+name = "crawler-storage"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+crawler-core = { path = "../crawler-core" }
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
