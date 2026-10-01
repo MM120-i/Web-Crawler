@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use chrono::{TimeZone, Utc};
-use crawler_core::{CrawlJobId, OriginId};
+use crawler_core::{CrawlConfig, CrawlJobId, OriginId};
 
 use crawler_storage::{
     FrontierRepository, JobRepository, LinkInput, NewFetchAttempt, NewUrl, OriginInput,
@@ -42,6 +44,39 @@ async fn repository_should_create_job_and_duplicate_urls(pool: PgPool) {
 
     assert!(first.is_some());
     assert!(second.is_none());
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn repository_create_job_from_config_works(pool: PgPool) {
+    let repository: PgRepository = PgRepository::from_pool(pool);
+
+    let config: CrawlConfig = CrawlConfig {
+        seeds: vec!["https://idkwhaimdoing.com/".parse().unwrap()],
+        allowed_hosts: vec!["idkwhaimdoing.com".to_string()],
+        allowed_path_prefixes: Vec::new(),
+        max_pages: 100,
+        max_depth: 2,
+        global_concurrency: 1,
+        per_origin_delay: Duration::ZERO,
+        request_timeout: Duration::from_secs(10),
+        connect_timeout: Duration::from_secs(5),
+        max_body_bytes: 1024 * 1024,
+        user_agent: "rust-web-crawler/0.1".to_string(),
+    };
+
+    let job_id: CrawlJobId = repository
+        .create_job_from_config("testing da config", &config)
+        .await
+        .unwrap();
+
+    let max_pages: String =
+        sqlx::query_scalar("SELECT config->>'max_pages' FROM crawl_jobs WHERE id = $1")
+            .bind(job_id.0 as i64)
+            .fetch_one(repository.pool())
+            .await
+            .unwrap();
+
+    assert_eq!(max_pages, "100");
 }
 
 #[sqlx::test(migrations = "../../migrations")]

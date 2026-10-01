@@ -17,7 +17,9 @@ pub struct OriginId(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FetchId(pub u64);
 
-#[derive(Debug, Clone)]
+// added serde::Serialize, to serialize into a JSON.
+// Duration format becomes something like {"secs": 10, "nanos": 0}
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct CrawlConfig {
     pub seeds: Vec<Url>,
     pub allowed_hosts: Vec<String>,
