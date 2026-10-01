@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use crawler_core::{CrawlConfig, CrawlJobId, OriginId, UrlId};
+use crawler_core::{AdmittedUrl, CrawlConfig, CrawlJobId, OriginId, UrlId};
 use serde_json::Value;
 
 use sqlx::{
@@ -160,6 +160,13 @@ pub trait JobRepository {
 pub trait FrontierRepository {
     async fn ensure_origin(&self, origin: &OriginInput) -> Result<OriginId, StorageError>;
     async fn enqueue_url(&self, url: &NewUrl) -> Result<Option<UrlId>, StorageError>;
+    // admitted url cuz ts already been scope checked n stuff (crawler_core::url::admit()) so we dont gotta re check anything.... probably
+    // the option -> either some id (newly added id) or none if its already there
+    async fn enqueue_seed(
+        &self,
+        job_id: CrawlJobId,
+        seed: &AdmittedUrl,
+    ) -> Result<Option<UrlId>, StorageError>;
 }
 
 #[async_trait]
@@ -256,6 +263,49 @@ impl FrontierRepository for PgRepository {
 
         row.map(|row: sqlx::postgres::PgRow| url_id(row.try_get("id")?))
             .transpose()
+    }
+
+    async fn enqueue_seed(
+        &self,
+        job_id: CrawlJobId,
+        seed: &AdmittedUrl,
+    ) -> Result<Option<UrlId>, StorageError> {
+        // buld da oriign input using seed.url. yoink the scheme, host and port and origin input out of the link
+        // uhh basically what website this url is on
+        let scheme = seed.url.scheme().to_string();
+
+        let host = crawler_core::Origin::from_url(&seed.url)
+            .ok_or_else(|| StorageError::InvalidState("seed has no host".into()))?
+            .host;
+
+        let port = seed
+            .url
+            .port_or_known_default()
+            .ok_or_else(|| StorageError::InvalidState("seed has no port".into()))?
+            as i32;
+
+        let origin_input = OriginInput {
+            origin_key: format!("{scheme}://{host}:{port}"),
+            scheme,
+            host,
+            port,
+        };
+
+        // make sure website exists inside origins table, gets its id
+        let origin_id = self.ensure_origin(&origin_input).await?;
+
+        // finally add the url to the todo list/queue/whatever with its ID
+        // again this is the seed so no discovery source and depth is gionna be 0
+        self.enqueue_url(&NewUrl {
+            job_id,
+            origin_id,
+            normalized_url: seed.crawl_key.as_str().to_string(),
+            fetch_url: seed.url.to_string(),
+            depth: seed.depth as i32,
+            priority: 0,
+            discovery_source_url_id: None,
+        })
+        .await
     }
 }
 

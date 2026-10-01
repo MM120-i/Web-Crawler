@@ -80,6 +80,59 @@ async fn repository_create_job_from_config_works(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../../migrations")]
+async fn repository_enqueue_seed_works(pool: PgPool) {
+    let repository: PgRepository = PgRepository::from_pool(pool);
+
+    // create a job for this test
+    let config: CrawlConfig = CrawlConfig {
+        seeds: vec!["https://idkwhaimdoing.com/".parse().unwrap()],
+        allowed_hosts: vec!["idkwhaimdoing.com".to_string()],
+        allowed_path_prefixes: Vec::new(),
+        max_pages: 100,
+        max_depth: 2,
+        global_concurrency: 1,
+        per_origin_delay: Duration::ZERO,
+        request_timeout: Duration::from_secs(10),
+        connect_timeout: Duration::from_secs(5),
+        max_body_bytes: 1024 * 1024,
+        user_agent: "rust-web-crawler/0.1".to_string(),
+    };
+
+    let job_id: CrawlJobId = repository
+        .create_job_from_config("testing da config", &config)
+        .await
+        .unwrap();
+
+    // turn seed into admitted url
+    let seed = crawler_core::url::admit(&config, &config.seeds[0], 0, None).unwrap();
+
+    // call it twice, second should be a dupe and should return none
+    let first: Option<crawler_core::UrlId> = repository.enqueue_seed(job_id, &seed).await.unwrap();
+    let second: Option<crawler_core::UrlId> = repository.enqueue_seed(job_id, &seed).await.unwrap();
+
+    assert!(first.is_some());
+    assert!(second.is_none());
+
+    // read it back and check the state
+    let state: String = sqlx::query_scalar("SELECT state FROM urls WHERE job_id = $1")
+        .bind(job_id.0 as i64)
+        .fetch_one(repository.pool())
+        .await
+        .unwrap();
+
+    assert_eq!(state, "PENDING");
+
+    // check to see if its only one row, and not two inserted
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM urls WHERE job_id = $1")
+        .bind(job_id.0 as i64)
+        .fetch_one(repository.pool())
+        .await
+        .unwrap();
+
+    assert_eq!(count, 1);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
 async fn repository_should_persist_fetch_attempt_timestamps(pool: PgPool) {
     let repository: PgRepository = PgRepository::from_pool(pool);
     let job_id: CrawlJobId = repository
